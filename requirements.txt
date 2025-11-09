@@ -1,0 +1,13 @@
+fastapi==0.115.5
+uvicorn[standard]==0.30.6
+orjson==3.10.7
+pydantic==2.9.2
+SQLAlchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+redis==5.0.7
+python-dotenv==1.0.1
+prometheus-client==0.21.0
+structlog==24.1.0
+tenacity==9.0.0
+dask==2025.1.0
+distributed==2025.1.0

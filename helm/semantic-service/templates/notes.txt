@@ -1,0 +1,4 @@
+1. Get the service URL by running:
+  kubectl get svc -n YOUR_NAMESPACE | grep semantic-service
+2. Check readiness:
+  kubectl rollout status deploy/$(helm get manifest semantic-service | grep -m1 'Deployment' | awk '{print $2}')

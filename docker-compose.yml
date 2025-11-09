@@ -1,0 +1,67 @@
+services:
+  db:
+    image: postgres:17
+    container_name: semantic-db
+    environment:
+      POSTGRES_DB: lextr
+      POSTGRES_USER: lextr_user
+      # Escape the $ for compose with $$
+      POSTGRES_PASSWORD: "Mygooru1028$$"
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lextr_user -d lextr"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    container_name: semantic-api
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    environment:
+      # Prefer service name 'db' inside the compose network (simpler & faster than host.docker.internal)
+      DATABASE_URL: "postgresql+asyncpg://lextr_user:Mygooru1028%24@db:5432/lextr"
+
+      # Redis service in the compose network (preferred). If you prefer a host Redis,
+      # set REDIS_URL back to redis://host.docker.internal:6379/0 and ensure host Redis is running.
+      REDIS_URL: "redis://redis:6379/0"
+
+      SEMANTIC_NAMESPACE_DEFAULT: default
+      SEMANTIC_VERSION: v0.1.0
+      ENABLE_CACHE: "true"
+      # Dask configuration:
+      # Set DASK_MODE to 'local' to force an in-process LocalCluster,
+      # or 'remote' to require a DASK_SCHEDULER_ADDRESS (e.g. tcp://dask-scheduler:8786).
+      # If DASK_MODE is omitted, the code uses DASK_SCHEDULER_ADDRESS if present otherwise LocalCluster.
+      # DASK_MODE: "local"
+      # DASK_SCHEDULER_ADDRESS: "tcp://dask-scheduler:8786"
+      UVICORN_WORKERS: "4"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  redis:
+    image: redis:7
+    container_name: semantic-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
