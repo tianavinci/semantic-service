@@ -28,7 +28,8 @@ class AttributeIn(BaseModel):
     data_type: str
     description: Optional[str] = None
     source_system: Optional[str] = None
-    owner: Optional[str] = None
+    created_by: str = "System"
+    updated_by: str = "System"
     synonyms: List[str] = []
     tags: List[str] = []
     is_active: bool = True

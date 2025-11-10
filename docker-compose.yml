@@ -1,67 +1,56 @@
 services:
-  db:
-    image: postgres:17
-    container_name: semantic-db
-    environment:
-      POSTGRES_DB: lextr
-      POSTGRES_USER: lextr_user
-      # Escape the $ for compose with $$
-      POSTGRES_PASSWORD: "Mygooru1028$$"
+  dask-scheduler:
+    container_name: dask-scheduler
+    build:
+      context: ./
+    command: ["dask-scheduler", "--host", "0.0.0.0", "--port", "8786", "--dashboard-address", ":8787"]
     ports:
-      - "5433:5432"
+      - "8786:8786"
+      - "8787:8787"
     restart: unless-stopped
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lextr_user -d lextr"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+
+  dask-worker:
+    build:
+      context: ./
+    command: ["dask-worker", "tcp://dask-scheduler:8786", "--nthreads", "2", "--memory-limit", "2GB"]
+    depends_on:
+      - dask-scheduler
+    restart: unless-stopped
 
   api:
     container_name: semantic-api
     build:
       context: ./
-      dockerfile: Dockerfile
     environment:
-      # Prefer service name 'db' inside the compose network (simpler & faster than host.docker.internal)
-      DATABASE_URL: "postgresql+asyncpg://lextr_user:Mygooru1028%24@db:5432/lextr"
+      # Use Postgres running on the host machine. Port 5433 on the host maps to the host Postgres.
+      # Removed the timeout query parameter because some asyncpg/asyncio combinations can treat it as a string
+      # and cause a TypeError when used with asyncio.timeouts. DB wait timeout is controlled via DB_WAIT_TIMEOUT.
+      DATABASE_URL: "postgresql+asyncpg://lextr_user:Mygooru1028%24@host.docker.internal:5433/lextr?sslmode=disable"
 
-      # Redis service in the compose network (preferred). If you prefer a host Redis,
-      # set REDIS_URL back to redis://host.docker.internal:6379/0 and ensure host Redis is running.
-      REDIS_URL: "redis://redis:6379/0"
+      # Use host Redis running on the host machine
+      REDIS_URL: "redis://host.docker.internal:6379/0"
+
+      # Fallback host IP (your Windows host IPv4) — used by scripts/wait_for_db.py
+      DOCKER_HOST_IP: "172.19.208.1"
+      # Increase wait timeout so the container retries longer (seconds)
+      DB_WAIT_TIMEOUT: "300"
+      DB_WAIT_INTERVAL: "1"
 
       SEMANTIC_NAMESPACE_DEFAULT: default
       SEMANTIC_VERSION: v0.1.0
-      ENABLE_CACHE: "true"
-      # Dask configuration:
-      # Set DASK_MODE to 'local' to force an in-process LocalCluster,
-      # or 'remote' to require a DASK_SCHEDULER_ADDRESS (e.g. tcp://dask-scheduler:8786).
-      # If DASK_MODE is omitted, the code uses DASK_SCHEDULER_ADDRESS if present otherwise LocalCluster.
-      # DASK_MODE: "local"
-      # DASK_SCHEDULER_ADDRESS: "tcp://dask-scheduler:8786"
+      ENABLE_CACHE: "false"
+      DASK_MODE: "remote"
+      DASK_SCHEDULER_ADDRESS: "tcp://dask-scheduler:8786"
+      DASK_LOCAL_THREADS: "0"
       UVICORN_WORKERS: "4"
+    # Ensure the api container can resolve host.docker.internal to the host gateway.
+    # Map to the Windows host IP that is reachable from your other working compose (change if yours differs).
+    extra_hosts:
+      - "host.docker.internal:172.19.208.1"  # update if your host IP differs
     ports:
       - "8080:8080"
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - dask-scheduler
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
-  redis:
-    image: redis:7
-    container_name: semantic-redis
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-volumes:
-  pgdata:
+# Note: local db/redis services removed as requested; the API will connect to services running on the host.

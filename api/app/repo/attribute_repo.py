@@ -101,3 +101,15 @@ class AttributeRepo:
         stmt = stmt.limit(limit).offset(offset)
         res = await self.session.execute(stmt)
         return res.scalars().all()
+
+    async def list_active(self, ns: str | None = None, entity: str | None = None):
+        """Return all active attributes, optionally filtered by namespace and/or entity.
+        This is intended for administrative operations such as cache warming/refreshing.
+        """
+        stmt = select(Attribute).where(Attribute.is_active == True)
+        if ns:
+            stmt = stmt.where(Attribute.namespace == ns)
+        if entity:
+            stmt = stmt.where(Attribute.entity == entity)
+        res = await self.session.execute(stmt)
+        return res.scalars().all()
